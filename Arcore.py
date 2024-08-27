@@ -1,10 +1,13 @@
 """
 Arcore
 =
-version:qwq (2024/8/26)
-'
 Created by Zaid_J vs. N0N_ame
 '
+version:qwqwq (2024/8/27)
+'
+1.新增多行AFF语句(str)转物件列表(list)
+2.删除Chart类的成员变量timinggrouplist与AddTimingGroup方法
+3.修改Chart类的成员变量defaulttiminggroup为affobjectlist, 可以将时间组添加到affobjectlist中
 """
 
 
@@ -15,13 +18,10 @@ def AFFStatement2AFFObject(AFFStatement):
     将aff文件语句转为可处理对象。
     
     参数:
-        timinggroup: 时间组。
-        note: 地面单点音符
-        hold: 地面长按音符
-        arc: 音弧
-        timing: 时间语句
-        scenecontrol: 场景控制语句
-        camera: 镜头语句
+        单个 AFF 格式语句
+    
+    返回:
+        物件
     """
     if "timinggroup" in AFFStatement: return 1
     elif "}" in AFFStatement: return 0
@@ -42,6 +42,37 @@ def AFFStatement2AFFObject(AFFStatement):
     obj.SetValueFromAFFStatement(AFFStatement)
     return obj
 
+def AFFStatements2AFFObjectList(AFFStatements):
+    """
+    将aff文件语句转为可处理对象列表。
+    
+    参数:
+        多个 AFF 格式语句组成的字符串
+    
+    返回:
+        物件列表
+    """
+    objlist=[]
+    AFFStatements=AFFStatements.split("\n")
+    nowloc = 0
+    while nowloc < len(AFFStatements):
+            obj = AFFStatement2AFFObject(AFFStatements[nowloc])
+            if obj == 1:
+                for j in range(nowloc,len(AFFStatements)):
+                    if AFFStatement2AFFObject(AFFStatements[j]) == 0:
+                        timinggroup = TimingGroup()
+                        timinggroup.SetValueFromAFFStatement("".join(AFFStatements[nowloc:j+1]))
+                        objlist.append(timinggroup)
+                        nowloc = j+1
+                        break
+            elif obj == None:
+                nowloc+=1
+            else:
+                objlist.append(obj)
+                nowloc+=1
+                
+    return objlist
+
 class Chart:
     """
     代表谱面。
@@ -51,16 +82,14 @@ class Chart:
         "AudioOffset:"AudioOffset
         "TimingPointDensityFactor:"TimingPointDensityFactor
         -
-        defaulttiminggroup
-        timinggrouplist
+        affobjectlist
 
             
     属性:
 
         AudioOffset: 谱面整体向前(-)/向后(+)移动多少毫秒。
         TimingPointDensityFactor: 音弧和地面长按音符的物量密度调整为正常值的多少倍。
-        defaulttiminggroup: 主时间组所有语句。
-        timinggrouplist: 所有时间组。
+        affobjectlist: 主时间组所有语句。
 
 
     需要注意:
@@ -71,18 +100,14 @@ class Chart:
         可以参照AudioOffset和TimingPointDensityFactor两行的格式写自己的“标注”
         但是并不会有任何效果，物件的读取从"-"所在的行之后开始
 
-        3.每张谱面必须有defaulttiminggroup，
-        timinggrouplist可为空。
+        3.每张谱面必须有affobjectlist
 
     方法:
-        __init__(self,AudioOffset=0,TimingPointDensityFactor=1.0,defaulttiminggroup=[],timinggrouplist=[]):
+        __init__(self,AudioOffset=0,TimingPointDensityFactor=1.0,affobjectlist=[],timinggrouplist=[]):
             初始化谱面属性。可以通过参数设置属性的初始值。
-        
-        AddTimingGroup(self,timinggroup):
-            添加一个新的时间组。
 
-        AddObject(self,defaulttiminggroupobject):
-            添加一个新的主时间组。
+        AddObject(self,affobject):
+            添加一个新的物件。
         
         ReadFile(self, AFFPath):
             从该路径中读取aff文件。
@@ -90,7 +115,7 @@ class Chart:
         SaveFile(self,AFFPath):
             将数据保存为该路径下的aff文件。
     """
-    def __init__(self,AudioOffset=0,TimingPointDensityFactor=1.0,defaulttiminggroup=[],timinggrouplist=[]):
+    def __init__(self,AudioOffset=0,TimingPointDensityFactor=1.0,affobjectlist=[]):
         """
         初始化谱面。
 
@@ -98,31 +123,20 @@ class Chart:
 
             AudioOffset: 谱面整体向前(-)/向后(+)移动多少毫秒。默认值为0。
             TimingPointDensityFactor: 音弧和地面长按音符的物量密度调整为正常值的多少倍。默认值为1.0。
-            defaulttiminggroup: 主时间组所有语句。默认值为空。
-            timinggrouplist: 所有时间组。默认值为空。
+            affobjectlist: 主时间组所有语句。默认值为空。包括TimingGroup
         """
         self.AudioOffset = AudioOffset
         self.TimingPointDensityFactor=TimingPointDensityFactor
-        self.defaulttiminggroup=defaulttiminggroup
-        self.timinggrouplist=timinggrouplist
+        self.affobjectlist=affobjectlist
     
-    def AddTimingGroup(self,timinggroup):
-        """
-        添加一个新的时间组。
-        
-        参数:
-            timinggroup: 时间组内包含的语句。
-        """
-        self.timinggrouplist.append(timinggroup)
-    
-    def AddObject(self,defaulttiminggroupobject):
+    def AddObject(self,affobject):
         """
         添加一个新的物件。
         
         参数:
-            defaulttiminggroupobject: 主时间组内包含的语句。
+            affobject: 主时间组内包含的语句。
         """
-        self.defaulttiminggroup.append(defaulttiminggroupobject)
+        self.affobjectlist.append(affobject)
 
     def ReadFile(self, AFFPath):
         """
@@ -152,7 +166,7 @@ class Chart:
                     if AFFStatement2AFFObject(chart[j]) == 0:
                         timinggroup = TimingGroup()
                         timinggroup.SetValueFromAFFStatement("".join(chart[nowloc:j+1]))
-                        self.AddTimingGroup(timinggroup)
+                        self.AddObject(timinggroup)
                         nowloc = j+1
                         break
             elif obj == None:
@@ -175,10 +189,8 @@ class Chart:
         if not (-0.000000001 < self.TimingPointDensityFactor - 1.0 < 0.000000001):
             chart.writelines(f"TimingPointDensityFactor:{self.TimingPointDensityFactor}\n")
         chart.writelines("-\n")
-        for obj in self.defaulttiminggroup:
+        for obj in self.affobjectlist:
             chart.writelines(obj.GetAFFStatement()+'\n')
-        for timinggroup in self.timinggrouplist:
-            chart.writelines(timinggroup.GetAFFStatement()+'\n')
         chart.close()
 
 class TimingGroup:
@@ -328,7 +340,7 @@ class Note:
             starttime (int): 地面单点音符开始时间。默认值为 0。
             lane (float/int): 地面单点音符所在的轨道。默认值为 1。
         """
-        self.starttime = starttime
+        self.starttime = int(starttime)
         self.lane = lane
 
     def SetValueFromAFFStatement(self, AFFStatement):
@@ -390,8 +402,8 @@ class Hold:
             endtime (int): 地面长按音符的结束时间。默认值为 1。
             lane (float/int): 地面长按音符所在的轨道。默认值为 1。
         """
-        self.starttime = starttime
-        self.endtime = endtime
+        self.starttime = int(starttime)
+        self.endtime = int(endtime)
         self.lane = lane
 
     def SetValueFromAFFStatement(self, AFFStatement):
@@ -497,7 +509,7 @@ class Arc:
         self.endy=float(endy)
         self.color=int(color)
         self.fx=fx
-        self.isvoid=bool(isvoid)
+        self.isvoid=isvoid
         self.arctaplist=arctaplist
     
     def AddSkyTap(self,starttime):
@@ -526,7 +538,7 @@ class Arc:
         self.endy               =float(value[6])
         self.color              =int(value[7])
         self.fx                 =value[8]
-        self.isvoid             =bool(value[9])
+        self.isvoid             =value[9]
         self.arctaplist         =re.findall(r'arctap\((\d+)\),?',value[10])
 
     def GetAFFStatement(self):
@@ -811,6 +823,3 @@ class Camera:
         """
         return f"camera({self.starttime},{self.positionx},{self.positiony},{self.positionz},{self.rotationx},{self.rotationy},{self.rotationz},{self.easing},{self.duration});"
     
-chart = Chart()
-chart.ReadFile("3.aff")
-chart.SaveFile("1.aff")
